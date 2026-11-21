@@ -1,0 +1,24 @@
+
+services:
+  - type: web
+    name: angeles-whatsapp-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 1 --threads 8 --timeout 60
+    healthCheckPath: /health
+    envVars:
+      - key: VERIFY_TOKEN
+        sync: false
+      - key: CHAKRA_TOKEN
+        sync: false
+      - key: CHAKRA_PLUGIN_ID
+        sync: false
+      - key: PHONE_NUMBER_ID
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: INFO_COLEGIO
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash

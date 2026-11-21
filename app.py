@@ -1,43 +1,41 @@
-import hashlib
-import hmac
 import logging
 import os
+import threading
 from collections import defaultdict, deque
 
 import requests
 from flask import Flask, request, abort
 
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mi_token_secreto")
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "clave123")
+CHAKRA_TOKEN = os.getenv("CHAKRA_TOKEN")
+CHAKRA_PLUGIN_ID = os.getenv("CHAKRA_PLUGIN_ID")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
-APP_SECRET = os.getenv("APP_SECRET")
+WA_API_VERSION = os.getenv("WA_API_VERSION", "v22.0")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-GRAPH_VERSION = "v21.0"
 
 SYSTEM_PROMPT = """
-Eres el asistente virtual de WhatsApp de [NOMBRE DE TU NEGOCIO].
-Tono: profesional, amable, claro y breve (máximo 5 líneas). Responde siempre en el idioma del cliente.
+Eres el asistente virtual de WhatsApp del Colegio Angeles de Jesus.
+Tono: amable, claro y breve (máximo 5 líneas). Responde en español.
 
-INFORMACIÓN DEL NEGOCIO:
-- Rubro: [describe qué vendes o qué servicio ofreces]
-- Horario: [Lunes a Sábado, 9:00 a 18:00]
-- Ubicación: [dirección o "atención online"]
-- Productos/servicios y precios: [lista aquí]
-- Métodos de pago: [Yape, transferencia, efectivo, etc.]
+INFORMACIÓN DEL COLEGIO:
+- Niveles: [inicial, primaria, secundaria]
+- Horario de atención: [Lunes a Viernes, 8:00 a 16:00]
+- Dirección: [escribe la dirección]
+- Matrícula y pensión: [escribe los montos]
+- Requisitos de inscripción: [escribe los requisitos]
+- Formas de pago: [Yape, transferencia, efectivo]
 
 REGLAS:
-- Usa solo la información anterior. Si no sabes algo, di que un asesor humano lo contactará pronto.
-- No inventes precios, promociones ni plazos.
-- Si el cliente quiere comprar o agendar, pide su nombre y los datos necesarios.
-- Si el cliente está molesto o pide hablar con una persona, indica que un asesor lo atenderá.
+- Usa solo la información anterior. Si no sabes algo, di que un asesor lo atenderá pronto.
+- No inventes precios, fechas ni promesas.
+- Si piden hablar con una persona, indica que un asesor los atenderá.
 """
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("bot")
 
 app = Flask(__name__)
-
 historial = defaultdict(lambda: deque(maxlen=10))
 procesados = deque(maxlen=500)
 
@@ -65,8 +63,11 @@ def responder_con_ia(numero, texto):
 
 
 def enviar_whatsapp(numero, texto):
-    url = f"https://graph.facebook.com/{GRAPH_VERSION}/{PHONE_NUMBER_ID}/messages"
-    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}"}
+    url = (
+        f"https://api.chakrahq.com/v1/ext/plugin/whatsapp/{CHAKRA_PLUGIN_ID}"
+        f"/api/{WA_API_VERSION}/{PHONE_NUMBER_ID}/messages"
+    )
+    headers = {"Authorization": f"Bearer {CHAKRA_TOKEN}"}
     data = {
         "messaging_product": "whatsapp",
         "to": numero,
@@ -75,27 +76,16 @@ def enviar_whatsapp(numero, texto):
     }
     r = requests.post(url, json=data, headers=headers, timeout=20)
     if not r.ok:
-        log.error("Error enviando WhatsApp: %s %s", r.status_code, r.text)
+        log.error("Error enviando por Chakra: %s %s", r.status_code, r.text)
+    else:
+        log.info("Respuesta enviada a %s", numero)
 
 
-def marcar_leido(message_id):
-    url = f"https://graph.facebook.com/{GRAPH_VERSION}/{PHONE_NUMBER_ID}/messages"
-    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}"}
-    data = {"messaging_product": "whatsapp", "status": "read", "message_id": message_id}
+def atender(numero, texto):
     try:
-        requests.post(url, json=data, headers=headers, timeout=10)
-    except Exception:
-        pass
-
-
-def firma_valida():
-    if not APP_SECRET:
-        return True
-    firma = request.headers.get("X-Hub-Signature-256", "")
-    esperado = "sha256=" + hmac.new(
-        APP_SECRET.encode(), request.get_data(), hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(firma, esperado)
+        enviar_whatsapp(numero, responder_con_ia(numero, texto))
+    except Exception as e:
+        log.exception("Error atendiendo a %s: %s", numero, e)
 
 
 @app.get("/webhook")
@@ -110,28 +100,26 @@ def verificar():
 
 @app.post("/webhook")
 def recibir():
-    if not firma_valida():
-        abort(403)
     data = request.get_json(silent=True) or {}
+    log.info("Evento recibido: %s", str(data)[:500])
     try:
         for entry in data.get("entry", []):
             for change in entry.get("changes", []):
                 for msg in change.get("value", {}).get("messages", []):
-                    msg_id = msg["id"]
+                    msg_id = msg.get("id")
                     if msg_id in procesados:
                         continue
                     procesados.append(msg_id)
                     numero = msg["from"]
-                    marcar_leido(msg_id)
                     if msg.get("type") == "text":
                         texto = msg["text"]["body"]
                         log.info("Mensaje de %s: %s", numero, texto)
-                        enviar_whatsapp(numero, responder_con_ia(numero, texto))
+                        threading.Thread(target=atender, args=(numero, texto)).start()
                     else:
-                        enviar_whatsapp(
-                            numero,
-                            "Por ahora solo puedo leer mensajes de texto. ¿Podrías escribirme tu consulta? 😊",
-                        )
+                        threading.Thread(
+                            target=enviar_whatsapp,
+                            args=(numero, "Por ahora solo puedo leer mensajes de texto. ¿Podrías escribirme tu consulta? 😊"),
+                        ).start()
     except Exception as e:
         log.exception("Error procesando webhook: %s", e)
     return "ok", 200

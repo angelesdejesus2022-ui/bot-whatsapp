@@ -1,9 +1,11 @@
+# ÁNGELES DE JESÚS - WHATSAPP AI
 
-# ANGELES DE JESUS - WHATSAPP AI
+**Asistente virtual inteligente del I.E.P. Ángeles de Jesús – Perú.**
 
-Asistente virtual del I.E.P. Angeles de Jesus.
+Sistema de atención automatizada para padres de familia y futuros alumnos, utilizando inteligencia artificial.
 
-## Tecnologias
+## Tecnologías
+
 - Python
 - Flask
 - WhatsApp API mediante ChakraHQ
@@ -11,23 +13,44 @@ Asistente virtual del I.E.P. Angeles de Jesus.
 - Render
 - GitHub
 
-## Funciones
-- Atencion automatica a padres.
-- Informacion de matriculas.
-- Consultas sobre el colegio.
-- Memoria temporal por contacto.
-- Identificacion de usuarios BSUID.
-- Respuestas mediante inteligencia artificial.
+## Funcionalidades
 
-## Instalacion
+- Atención automática a padres de familia.
+- Información sobre matrículas y admisiones.
+- Consultas relacionadas con el colegio.
+- Memoria temporal independiente por contacto.
+- Identificación de usuarios BSUID.
+- Respuestas inteligentes mediante Google Gemini.
+- Procesamiento de mensajes de WhatsApp.
+
+## Instalación
+
+Instalar las dependencias:
+
+```bash
 pip install -r requirements.txt
+```
 
-## Ejecucion
+## Ejecución local
+
+```bash
 python app.py
+```
 
-## Produccion
+## Producción
+
+El servidor utiliza Gunicorn:
+
+```bash
 gunicorn app:app
+```
 
 ## Seguridad
-Las claves API deben configurarse
-como variables de entorno en Render.
+
+- No publicar claves API en GitHub.
+- Configurar las credenciales mediante variables de entorno en Render.
+- Proteger los tokens de WhatsApp y Google Gemini.
+
+## Proyecto
+
+Desarrollado para mejorar la atención y comunicación del I.E.P. Ángeles de Jesús.
